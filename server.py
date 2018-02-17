@@ -8,6 +8,7 @@ from pythonosc import osc_message_builder
 from pythonosc import udp_client
 from utils import process_state, read_state
 
+
 class ServerProcess:
 	pid = -1
 	processStates = []
@@ -19,6 +20,9 @@ class ServerProcess:
 	value = None
 
 	electionCount = -1
+	electionLatestView = -1
+	electionLatestValue = None
+	electionDecided = True
 	
 	def __init__(self, pid):
 		self.pid = pid
@@ -30,22 +34,32 @@ class ServerProcess:
 			s = udp_client.SimpleUDPClient(p.ip, p.port)
 			self.sendChannels.append(s)
 
-	def start(self):
-		port = self.processStates[self.pid].port
 
+	def start(self):
 		# initialze listening channels
 		d = dispatcher.Dispatcher()
 		d.map("/iAmLeader", self.iAmLeader_handler, self)
 		d.map("/youAreLeader", self.youAreLeader_handler, self)
 
+		port = self.processStates[self.pid].port
 		listen = osc_server.ThreadingOSCUDPServer(("127.0.0.1", port), d)
 		listeningThread = threading.Thread(target=listen.serve_forever)
 		listeningThread.start()
 
+		print("Process {} started.".format(self.pid))
+
 		if self.pid == 0:
-			print("It's my turn to be a leader. Sending iAmLeader.")
-			self.electionCount = 0
-			self.sendMessageToEveryone("/iAmLeader", 0, False)
+			self.sendIAmLeader()
+
+
+	def sendIAmLeader(self):
+		print("Sending iAmLeader.")
+		self.electionCount = 0
+		self.electionLatestView = -1
+		self.electionLatestValue = None
+		self.electionDecided = False
+		self.sendMessageToEveryone("/iAmLeader", 0, False)
+
 
 	def sendMessageToEveryone(self, label, value, exceptMe=True):
 		# for s in sendChannels:
@@ -58,26 +72,43 @@ class ServerProcess:
 
 
 	def iAmLeader_handler(self, addr, args, newView):
+		print()
+		print(addr)
 		newLeader = newView % self.totalNumber
 		print("Process {} sent iAmLeader.".format(newLeader))
 		if newView > self.view:
-			# send back my previous state
-			leaderChannel = self.sendChannels[newLeader]
-			leaderChannel.send_message('/youAreLeader', "{} {}".format(self.view, self.value))
 			# update my state
+			previousView = self.view
 			self.view = newView
 			self.leader = newLeader
+			# send back my previous state
+			leaderChannel = self.sendChannels[newLeader]
+			leaderChannel.send_message('/youAreLeader', "{} {}".format(previousView, self.value))
+
 
 	def youAreLeader_handler(self, addr, args, response):
-		parsed = response.split()
-		oldView = parsed[0]
-		oldValue = parsed[1]
-		
-		self.electionCount += 1
-		print(self.electionCount) # ?????????????????????????????
-		
-		if self.electionCount > self.totalNumber/2:
-			print("Yeah I become a leader!")
+		print()
+		print(addr)
+		if self.electionDecided:
+			print("I already got majority vote to be a leader.")
+		else:
+			parsed = response.split()
+			responseView = int(parsed[0])
+			responseValue = parsed[1]
+
+			if responseView > self.electionLatestView:
+				self.electionLatestValue = responseValue
+			
+			self.electionCount += 1
+			print("# of votes I got:", self.electionCount)
+
+			if self.electionCount > self.totalNumber/2:
+				self.electionDecided = True
+				print("Yeah I become a leader!")
+				if self.electionLatestValue == None:
+					print("I can propose whatever value I want.")
+				else:
+					print("I have to propose value:", self.electionLatestValue)
 
 # --------- ServerProcess
 
