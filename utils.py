@@ -1,7 +1,7 @@
 class process_state:
 	def __init__(self, ip_val, port_val, pid_val):
 		self.ip = ip_val
-		self.port = port_val
+		self.port = int(port_val)
 		self.pid = pid_val
 		self.fault = False
 
