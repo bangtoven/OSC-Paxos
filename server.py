@@ -38,7 +38,7 @@ class ServerProcess:
 		d.map("/iAmLeader", self.iAmLeader_handler, self)
 		d.map("/youAreLeader", self.youAreLeader_handler, self)
 
-		listen = osc_server.ForkingOSCUDPServer(("127.0.0.1", port), d)
+		listen = osc_server.ThreadingOSCUDPServer(("127.0.0.1", port), d)
 		listeningThread = threading.Thread(target=listen.serve_forever)
 		listeningThread.start()
 
@@ -69,8 +69,6 @@ class ServerProcess:
 			self.leader = newLeader
 
 	def youAreLeader_handler(self, addr, args, response):
-		print(self)
-		print(self.electionCount)
 		parsed = response.split()
 		oldView = parsed[0]
 		oldValue = parsed[1]
