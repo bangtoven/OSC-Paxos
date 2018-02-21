@@ -13,6 +13,7 @@ class ServerProcess:
 	pid = -1
 	processStates = []
 	sendChannels = []
+	learnerChannels = []
 
 	totalNumber = 0
 	leader = -1
@@ -33,6 +34,7 @@ class ServerProcess:
 		for p in self.processStates:
 			s = udp_client.SimpleUDPClient(p.ip, p.port)
 			self.sendChannels.append(s)
+			self.learnerChannels.append(s)
 
 
 	def start(self):
@@ -40,6 +42,8 @@ class ServerProcess:
 		d = dispatcher.Dispatcher()
 		d.map("/iAmLeader", self.iAmLeader_handler, self)
 		d.map("/youAreLeader", self.youAreLeader_handler, self)
+		d.map("/valueProposal", self.valueProposal_handler, self)
+		d.map("/accept", self.accept_handler, self)
 
 		port = self.processStates[self.pid].port
 		listen = osc_server.ThreadingOSCUDPServer(("127.0.0.1", port), d)
@@ -59,7 +63,7 @@ class ServerProcess:
 		self.electionLatestValue = None
 		self.electionDecided = False
 		self.sendMessageToEveryone("/iAmLeader", 0, False)
-
+		#why is 0 being sent here? we should send leader number, what is leader number?
 
 	def sendMessageToEveryone(self, label, value, exceptMe=True):
 		# for s in sendChannels:
@@ -70,6 +74,10 @@ class ServerProcess:
 			s.send_message(label, value)
 			time.sleep(0.5)
 
+	def sendMessageToLearners(self, label, value):
+		for s in self.learnerChannels:
+			s.send_message(label, value)
+			time.sleep(0.5)
 
 	def iAmLeader_handler(self, addr, args, newView):
 		print()
@@ -83,7 +91,8 @@ class ServerProcess:
 			self.leader = newLeader
 			# send back my previous state
 			leaderChannel = self.sendChannels[newLeader]
-			leaderChannel.send_message('/youAreLeader', "{} {}".format(previousView, self.value))
+			print("Sending youAreLeader...")
+			leaderChannel.send_message("/youAreLeader", "{} {}".format(previousView, self.value))
 
 
 	def youAreLeader_handler(self, addr, args, response):
@@ -107,9 +116,39 @@ class ServerProcess:
 				print("Yeah I become a leader!")
 				if self.electionLatestValue == None:
 					print("I can propose whatever value I want.")
+					valueToPropose = 19
 				else:
 					print("I have to propose value:", self.electionLatestValue)
+					valueToPropose = self.electionLatestValue
+				self.propose(valueToPropose)
 
+
+	def propose(self, valueToPropose):
+		print("Propsing value: ", valueToPropose)
+		self.sendMessageToEveryone("/valueProposal", "{} {} {}".format(self.pid, self.view, valueToPropose), False)
+
+
+	def valueProposal_handler(self, addr, args, viewAndValue):
+		print()
+		print(addr)
+		parsed = viewAndValue.split()
+		proposerPid = int(parsed[0])
+		proposerView = int(parsed[1])
+		proposedValue = parsed[2]
+		
+		if proposerView >= self.view:
+			print("accepted value")
+			self.sendMessageToLearners("/accept", "{} {}".format(proposerView, proposedValue))
+
+
+	def accept_handler(self, addr, args, viewAndValue):
+		print()
+		print(addr)
+		parsed = viewAndValue.split()
+		view = parsed[0]
+		value = parsed[1]
+		print("view", view)
+		print("value accepted: ", value)
 # --------- ServerProcess
 
 
@@ -120,3 +159,4 @@ if __name__ == "__main__":
 
 	server = ServerProcess(args.pid)
 	server.start()
+	
