@@ -1,43 +1,41 @@
 import argparse
-import math
 import threading
 import time
 from pythonosc import dispatcher
 from pythonosc import osc_server
-from pythonosc import osc_message_builder
 from pythonosc import udp_client
-from utils import process_state, read_state
+from utils import read_state
 from record import Record
+from majority import MajorityCheck
 
+from threading import Lock
 
 class ServerProcess:
-    pid = -1
-    processStates = []
-    sendChannels = []
-    # learnerChannels = []
-
-    totalNumber = 0
-    leader = -1
-    view = -1
-    # value = None
-    records = []  # multi-paxos
-    round = -1 # index for messages
-
-    electionCount = -1
-    electionLatestView = -1
-    electionLatestValue = None
-    electionDecided = True
-
     def __init__(self, pid):
+        self.mutex = Lock()
+
         self.pid = pid
+        self.leader = -1
+        self.view = -1
 
         self.processStates = read_state("config")
-        self.totalNumber = len(self.processStates)
-
+        self.sendChannels = []
         for p in self.processStates:
             s = udp_client.SimpleUDPClient(p.ip, p.port)
             self.sendChannels.append(s)
             # self.learnerChannels.append(s)
+
+        self.totalNumber = len(self.processStates)
+        MajorityCheck.total = self.totalNumber
+
+        self.records = []  # multi-paxos
+        self.round = -1  # index for messages
+        self.majorityCheck = []
+
+        self.electionCount = -1
+        self.electionLatestView = -1
+        self.electionLatestValue = None
+        self.electionDecided = True
 
 
     def start(self):
@@ -121,9 +119,7 @@ class ServerProcess:
 
     def youAreLeader_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
-        if self.electionDecided:
-            print("I already got majority vote to be a leader.")
-        else:
+        if self.electionDecided == False:
             parsed = recievedMsg.split()
             responseView = int(parsed[0])
             responseValue = parsed[1]
@@ -161,36 +157,56 @@ class ServerProcess:
 
         if proposerView >= self.view:
             # multi-paxos. sequence of data
-            while len(self.records) != proposedRound:
-                self.records += [None]
-            record = Record(proposedRound, proposedValue)
-            self.records += [record]
-
+            self.appendRecord(proposedRound, proposedValue)
             self.view = proposerView
             self.round = proposedRound
-            sendingMsg = "{} {} {}".format(self.view, self.round, record.value)
+            sendingMsg = "{} {} {}".format(self.view, self.round, proposedValue)
             self.sendMessageToLearners("/accept", sendingMsg)
         else:
             print("ignore")
 
 
+    def appendRecord(self, round, value):
+        self.mutex.acquire()
+        try:
+            while len(self.records) < round:
+                self.records += [None]
+
+            if len(self.records) > round:
+                print("!!!!!!!!!!! something goes wrong? how does the Paxos deal with this? !!!!!!!!!!!!")
+
+            record = Record(round, value)
+            self.records += [record]
+        finally:
+            self.mutex.release()
+
+
     def accept_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
-
-        # need to check majority
-
         parsed = recievedMsg.split()
         view = parsed[0]
-        round = parsed[1]
-        value = parsed[2]
-        print("view: ", view)
-        print("round: ", round)
-        print("value accepted: ", value)
+        round = int(parsed[1])
+        value = int(parsed[2])
 
-        # for testing
-        if (self.view % self.totalNumber) == self.pid:
-            valueToPropose = input("Propose more: ")  # get input from console
-            self.propose(valueToPropose)
+        # need to check majority
+        if len(self.records) < round:
+            self.appendRecord(round, value) # could have been dropped or something
+
+        record = self.records[round]
+        if record.majorityCheck.addVoteAndCheck() == True:
+            print("Majority accepted it.")
+
+            print("view: ", view)
+            print("round: ", round)
+            print("value accepted so far")
+            for r in self.records:
+                print(r.value)
+            print("----")
+
+            # for testing
+            if (self.view % self.totalNumber) == self.pid:
+                valueToPropose = input("Propose more: ")  # get input from console
+                self.propose(valueToPropose)
 
 
 # --------- ServerProcess
