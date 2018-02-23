@@ -50,6 +50,7 @@ class ServerProcess:
         d.map("/youAreLeader", self.youAreLeader_handler, self)
         d.map("/valueProposal", self.valueProposal_handler, self)
         d.map("/accept", self.accept_handler, self)
+        d.map("/leaderFaulty", self.leaderFaulty_handler, self)
 
         port = self.processStates[self.pid].port
         listen = osc_server.ThreadingOSCUDPServer(("127.0.0.1", port), d)
@@ -88,7 +89,7 @@ class ServerProcess:
             self.electionLatestView = -1
             self.electionLatestValue = None
             self.electionDecided = False
-            message = "{} {}".format(nextView, nextRound)
+            message = "{}\t{}".format(nextView, nextRound)
             self.sendMessageToEveryone("/iAmLeader", message)
         else:
             print("It's not my turn to be a leader.")
@@ -96,7 +97,7 @@ class ServerProcess:
 
     def iAmLeader_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
-        parsed = recievedMsg.split()
+        parsed = recievedMsg.split("\t")
         newView = int(parsed[0])
         newRound = int(parsed[1])
         newLeader = newView % self.totalNumber
@@ -109,14 +110,16 @@ class ServerProcess:
             self.leader = newLeader
 
             # send back my previous state
-            previousRecord = self.records[newRound]
-            previousValue = None
-            if previousRecord != None: # I need better understanding on multi-paxos for this.
-                previousValue = previousRecord.value
-
+            if self.round < newRound: # normal case
+                previousValue = None
+            elif self.round == newRound:
+                previousValue = self.records[newRound].value
+            else: # self.round > newRound. How to deal with this situation?
+                previousValue = "multiple values"
+                
+            sendingMsg = "{}\t{}".format(previousView, previousValue)
             print("Sending youAreLeader...")
             leaderChannel = self.sendChannels[newLeader]
-            sendingMsg = "{} {}".format(previousView, previousValue)
             leaderChannel.send_message("/youAreLeader", sendingMsg)
         else:
             print("Invalid leader id.")
@@ -125,11 +128,11 @@ class ServerProcess:
     def youAreLeader_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
         if self.electionDecided == False:
-            parsed = recievedMsg.split()
+            parsed = recievedMsg.split("\t")
             responseView = int(parsed[0])
             responseValue = parsed[1]
 
-            if responseView > self.electionLatestView:
+            if responseView > self.electionLatestView and (responseView % self.totalNumber) != self.pid: # not me
                 self.electionLatestValue = responseValue
 
             self.electionCount += 1
@@ -138,7 +141,7 @@ class ServerProcess:
             if self.electionCount > self.totalNumber / 2:
                 self.electionDecided = True
                 print("Yeah I become a leader!")
-                if self.electionLatestValue is None:
+                if self.electionLatestValue is None or self.electionLatestValue == 'None':
                     print("I can propose whatever value I want.")
                     valueToPropose = input("Enter something: ") # get input from console
                 else:
@@ -150,13 +153,13 @@ class ServerProcess:
     def propose(self, value):
         print("Propsing value: ", value)
         self.round += 1
-        self.sendMessageToEveryone("/valueProposal", "{} {} {}".format(self.view, self.round, value))
+        self.sendMessageToEveryone("/valueProposal", "{}\t{}\t{}".format(self.view, self.round, value))
 
 
     def valueProposal_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
         print(recievedMsg)
-        parsed = recievedMsg.split()
+        parsed = recievedMsg.split("\t")
         proposerView = int(parsed[0])
         proposedRound = int(parsed[1])
         proposedValue = parsed[2]
@@ -166,20 +169,23 @@ class ServerProcess:
             self.appendRecord(proposedRound, proposedValue)
             self.view = proposerView
             self.round = proposedRound
-            sendingMsg = "{} {} {}".format(self.view, self.round, proposedValue)
+            sendingMsg = "{}\t{}\t{}".format(self.view, self.round, proposedValue)
             self.sendMessageToLearners("/accept", sendingMsg)
         else:
             print("ignore")
 
 
     def appendRecord(self, round, value):
+        if self.records[round] is not None:
+            return
+
+        if len(self.records) <= round:
+            print("allocate array")
+            for _ in range(100):
+                self.records += [None]
+
         self.mutex.acquire()
         try:
-            if len(self.records) <= round:
-                print("allocate array")
-                for _ in range(100):
-                    self.records += [None]
-
             record = Record(round, value)
             self.records[round] = record
         finally:
@@ -188,7 +194,7 @@ class ServerProcess:
 
     def accept_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
-        parsed = recievedMsg.split()
+        parsed = recievedMsg.split("\t")
         view = parsed[0]
         round = int(parsed[1])
         value = parsed[2]
@@ -196,6 +202,8 @@ class ServerProcess:
         record = self.records[round]
         if record is None:
             print("I don't have this record, yet!")
+            self.appendRecord(round, value)
+            record = self.records[round]
 
         if record.majorityCheck.addVoteAndCheck() == True:
             print("Majority accepted it.")
@@ -211,7 +219,21 @@ class ServerProcess:
             # for testing
             if (self.view % self.totalNumber) == self.pid:
                 valueToPropose = input("Propose more: ")  # get input from console
-                self.propose(valueToPropose)
+                if valueToPropose == "change":
+                    self.sendLeaderFaulty()
+                else:
+                    self.propose(valueToPropose)
+
+
+    def sendLeaderFaulty(self):
+        print("sendLeaderFaulty")
+        self.sendMessageToEveryone("/leaderFaulty", "{}".format(self.view))
+
+
+    def leaderFaulty_handler(self, addr, args, recievedMsg):
+        print("Someone says leader is faulty.")
+        self.sendIAmLeader()
+
 
 
 # --------- ServerProcess
