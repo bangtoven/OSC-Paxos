@@ -5,6 +5,7 @@ class Record:
         self.round = round
         self.value = value
         self.majorityCheck = MajorityCheck()
+        self.learned = False
 
     def toString(self):
         "{} {}".format(self.round, self.value)

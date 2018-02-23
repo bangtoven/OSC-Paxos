@@ -60,7 +60,7 @@ class ServerProcess:
         print("Process {} started.".format(self.pid))
 
         if self.pid == 0:
-            self.sendIAmLeader()
+            self.shouldIBeLeader()
 
 
     def sendMessageToEveryone(self, label, value, exceptMe=False):
@@ -80,7 +80,7 @@ class ServerProcess:
         #     time.sleep(0.5)
 
 
-    def sendIAmLeader(self):
+    def shouldIBeLeader(self):
         nextView = self.view+1
         nextRound = self.round+1
         if (nextView % self.totalNumber) == self.pid:
@@ -110,16 +110,26 @@ class ServerProcess:
             self.leader = newLeader
 
             # send back my previous state
-            if self.round < newRound: # normal case
+            if self.round == newRound-1: # normal case
                 previousValue = None
             elif self.round == newRound:
-                previousValue = self.records[newRound].value
+                record = self.records[newRound]
+                if record.learned: # only when it is learned by learner?
+                    previousValue = record.value
+            elif self.round < newRound:
+                # it means I miss something
+                previousValue = None # first, you agree this one to be a leader
+                # self.request_other_process_for_missing_rounds_values(myLastRound)
+                # then other process will give you missing values
             else:
                 # self.round > newRound.
                 # acceptor has more information.
                 # the leader is missing some records.
                 # How to deal with this situation?
-                previousValue = "multiple values???"
+                # previousValue = "multiple values???"
+                # => send leader faulty, and expect other process (or me), which is most up to date, becomes a leader
+                self.sendLeaderFaulty()
+                return
                 
             sendingMsg = "{}\t{}".format(previousView, previousValue)
             print("Sending youAreLeader...")
@@ -169,10 +179,9 @@ class ServerProcess:
         proposedValue = parsed[2]
 
         if proposerView >= self.view:
+            self.view = proposerView # in case you missed the leader election
             # multi-paxos. sequence of data
             self.appendRecord(proposedRound, proposedValue)
-            self.view = proposerView
-            self.round = proposedRound
             sendingMsg = "{}\t{}\t{}".format(self.view, self.round, proposedValue)
             self.sendMessageToLearners("/accept", sendingMsg)
         else:
@@ -192,6 +201,7 @@ class ServerProcess:
         try:
             record = Record(round, value)
             self.records[round] = record
+            self.round = round
         finally:
             self.mutex.release()
 
@@ -211,6 +221,7 @@ class ServerProcess:
 
         if record.majorityCheck.addVoteAndCheck() == True:
             print("Majority accepted it.")
+            record.learned = True
 
             print("view: ", view)
             print("round: ", round)
@@ -231,12 +242,15 @@ class ServerProcess:
 
     def sendLeaderFaulty(self):
         print("sendLeaderFaulty")
-        self.sendMessageToEveryone("/leaderFaulty", "{}".format(self.view))
+        self.sendMessageToEveryone("/leaderFaulty", self.view)
 
 
     def leaderFaulty_handler(self, addr, args, recievedMsg):
-        print("Someone says leader is faulty.")
-        self.sendIAmLeader()
+        if int(recievedMsg) == self.view:
+            print("Someone says my leader is faulty.")
+            self.shouldIBeLeader()
+        else:
+            print("It's not my current leader. Maybe I already had dealt with this issue.")
 
 
 
