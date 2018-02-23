@@ -114,8 +114,12 @@ class ServerProcess:
                 previousValue = None
             elif self.round == newRound:
                 previousValue = self.records[newRound].value
-            else: # self.round > newRound. How to deal with this situation?
-                previousValue = "multiple values"
+            else:
+                # self.round > newRound.
+                # acceptor has more information.
+                # the leader is missing some records.
+                # How to deal with this situation?
+                previousValue = "multiple values???"
                 
             sendingMsg = "{}\t{}".format(previousView, previousValue)
             print("Sending youAreLeader...")
@@ -180,7 +184,7 @@ class ServerProcess:
             return
 
         if len(self.records) <= round:
-            print("allocate array")
+            print("allocate array for record")
             for _ in range(100):
                 self.records += [None]
 
@@ -218,7 +222,7 @@ class ServerProcess:
 
             # for testing
             if (self.view % self.totalNumber) == self.pid:
-                valueToPropose = input("Propose more: ")  # get input from console
+                valueToPropose = input("Propose more::::::: ")  # get input from console
                 if valueToPropose == "change":
                     self.sendLeaderFaulty()
                 else:
