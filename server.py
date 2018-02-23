@@ -25,17 +25,22 @@ class ServerProcess:
             self.sendChannels.append(s)
             # self.learnerChannels.append(s)
 
-        self.totalNumber = len(self.processStates)
-        MajorityCheck.total = self.totalNumber
-
-        self.records = []  # multi-paxos
-        self.round = -1  # index for messages
-        self.majorityCheck = []
-
         self.electionCount = -1
         self.electionLatestView = -1
         self.electionLatestValue = None
         self.electionDecided = True
+
+        self.totalNumber = len(self.processStates)
+        MajorityCheck.total = self.totalNumber
+
+        # multi-paxos
+        self.round = -1  # index for messages
+        self.majorityCheck = []
+        self.records = []
+        for _ in range(100):
+            self.records += [None]
+
+
 
 
     def start(self):
@@ -104,9 +109,9 @@ class ServerProcess:
             self.leader = newLeader
 
             # send back my previous state
+            previousRecord = self.records[newRound]
             previousValue = None
-            if len(self.records) > newRound: # I need better understanding on multi-paxos for this.
-                previousRecord = self.records[newRound]
+            if previousRecord != None: # I need better understanding on multi-paxos for this.
                 previousValue = previousRecord.value
 
             print("Sending youAreLeader...")
@@ -133,7 +138,7 @@ class ServerProcess:
             if self.electionCount > self.totalNumber / 2:
                 self.electionDecided = True
                 print("Yeah I become a leader!")
-                if self.electionLatestValue == None:
+                if self.electionLatestValue is None:
                     print("I can propose whatever value I want.")
                     valueToPropose = input("Enter something: ") # get input from console
                 else:
@@ -150,6 +155,7 @@ class ServerProcess:
 
     def valueProposal_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
+        print(recievedMsg)
         parsed = recievedMsg.split()
         proposerView = int(parsed[0])
         proposedRound = int(parsed[1])
@@ -169,14 +175,13 @@ class ServerProcess:
     def appendRecord(self, round, value):
         self.mutex.acquire()
         try:
-            while len(self.records) < round:
-                self.records += [None]
-
-            if len(self.records) > round:
-                print("!!!!!!!!!!! something goes wrong? how does the Paxos deal with this? !!!!!!!!!!!!")
+            if len(self.records) <= round:
+                print("allocate array")
+                for _ in range(100):
+                    self.records += [None]
 
             record = Record(round, value)
-            self.records += [record]
+            self.records[round] = record
         finally:
             self.mutex.release()
 
@@ -186,13 +191,12 @@ class ServerProcess:
         parsed = recievedMsg.split()
         view = parsed[0]
         round = int(parsed[1])
-        value = int(parsed[2])
-
-        # need to check majority
-        if len(self.records) < round:
-            self.appendRecord(round, value) # could have been dropped or something
+        value = parsed[2]
 
         record = self.records[round]
+        if record is None:
+            print("I don't have this record, yet!")
+
         if record.majorityCheck.addVoteAndCheck() == True:
             print("Majority accepted it.")
 
@@ -200,7 +204,8 @@ class ServerProcess:
             print("round: ", round)
             print("value accepted so far")
             for r in self.records:
-                print(r.value)
+                if r is not None:
+                    print(r.value)
             print("----")
 
             # for testing
