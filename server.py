@@ -13,20 +13,20 @@ from message import Message
 from threading import Lock
 
 class ServerProcess:
-    def __init__(self, pid):
+    def __init__(self, pid, server_count, client_count):
         self.mutex = Lock()
 
         self.pid = pid
         self.view = -1
 
-        serverConfig = read_state("servers_config")
+        serverConfig = read_state("servers_config", server_count)
         self.port = serverConfig[self.pid].port
         self.sendChannels = []
         for p in serverConfig:
             s = udp_client.SimpleUDPClient(p.ip, p.port)
             self.sendChannels.append(s)
 
-        clientConfig = read_state("clients_config")
+        clientConfig = read_state("clients_config", client_count)
         self.clientChannels = []
         for p in clientConfig:
             s = udp_client.SimpleUDPClient(p.ip, p.port)
@@ -226,8 +226,10 @@ class ServerProcess:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pid", type=int, default=-1, help="The id of the process")
+    parser.add_argument("--server_count", type=int, default=3, help="number of servers")
+    parser.add_argument("--client_count", type=int, default=2, help="number of clients")
     args = parser.parse_args()
 
-    server = ServerProcess(args.pid)
+    server = ServerProcess(args.pid, args.server_count, args.client_count)
     server.start()
 
