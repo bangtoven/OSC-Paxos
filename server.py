@@ -37,7 +37,8 @@ class ServerProcess:
         self.electionStatus = None
 
         # multi-paxos
-        self.roundNumber = -1  # index for messages
+        self.lastRound = -1  # index for messages
+        self.executedRound = -1
         self.records = []
         self.buffer = []
         for _ in range(100):
@@ -66,19 +67,19 @@ class ServerProcess:
         nextView = view + 1
         if (nextView % self.totalNumber) == self.pid:
             print("Sending iAmLeader.")
-            self.electionStatus = Election(nextView, self.roundNumber+1, None)
+            self.electionStatus = Election(nextView, self.lastRound+1, None)
             self.sendMessageToServers("/iAmLeader", self.electionStatus.toString())
         else:
             self.electionStatus = None
             print("It's not my turn to be a leader.")
 
-    # acceptor
+    # new leader => acceptor
     def iAmLeader_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
         election = Election.fromString(recievedMsg)
         newView = election.view
         newLeader = newView % self.totalNumber
-        newRound = election.roundNumber
+        newRound = election.lastRound
         print("Process {} sent iAmLeader.".format(newLeader))
 
         if newView >= self.view:
@@ -86,23 +87,26 @@ class ServerProcess:
             self.view = newView
 
             # send back my previous state
-            if self.roundNumber < newRound:
+            if self.lastRound == newRound-1: # normal case
                 previousValue = None
-            elif self.roundNumber == newRound:
+            elif self.lastRound == newRound:
                 record = self.records[newRound]
                 if record.learned == False: # only when it is not learned yet
                     previousValue = record.message
+            elif self.lastRound < newRound:
+                print("I am missing something")
+                # TODO ask other server for the missing value
             else:
                 # this guy is missing some records.
                 self.sendLeaderFaulty()
                 return
 
             print("Sending youAreLeader...")
-            response = Election(previousView, self.roundNumber, previousValue)
+            response = Election(previousView, self.lastRound, previousValue)
             leaderChannel = self.sendChannels[newLeader]
             leaderChannel.send_message("/youAreLeader", response.toString())
 
-    # new_leader
+    # acceptor => new leader
     def youAreLeader_handler(self, addr, args, recievedMsg):
         print("\n" + addr)
         if self.electionStatus is not None and self.electionStatus.decided == False:
@@ -112,24 +116,38 @@ class ServerProcess:
 
             if self.electionStatus.majorityCheck.addVoteAndCheck():
                 self.electionStatus.decided = True
-                print("Yeah, I become a leader. Ready to process client requests.")
-                if self.electionStatus.latestValue is not None:
-                    # TODO there's some value accepted but not learned yet.
-                    print("I need to propose this value")
+                print("Yeah, I become a leader.")
 
-    # all processes
+                hole = self.detectHole()
+                if hole != -1:
+                    filling = Record(self.view, hole, self.buffer[0])
+                    self.propose(filling)
+
+                if self.electionStatus.latestValue is not None:
+                    latestMsg = Message(self.electionStatus.latestValue)
+                    fromPrevious = Record(self.view, response.roundNumber, latestMsg)
+                    self.propose(fromPrevious)
+
+                print("Ready to process client requests.")
+
+    # client => all processes
     def clientRequest_handler(self, addr, args, recievedMsg):
         print("\n" + addr)
         print("ClientRequest, msg: ", recievedMsg)
         message = Message.fromString(recievedMsg)
         if (self.view % self.totalNumber == self.pid):
-            self.roundNumber += 1
-            record = Record(self.view, self.roundNumber, message)
-            self.sendMessageToServers("/valueProposal", record.toString())
+            self.lastRound += 1
+            record = Record(self.view, self.lastRound, message)
+            self.propose(record)
         else:
             self.buffer.append(message)
 
-    # acceptor
+    # leader => acceptor
+    def propose(self, record):
+        print("Propose value:", record.toString())
+        self.sendMessageToServers("/valueProposal", record.toString())
+
+    # leader => acceptor
     def valueProposal_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
         record = Record.fromString(recievedMsg)
@@ -137,17 +155,16 @@ class ServerProcess:
         if record.view >= self.view:
             self.view = record.view # in case you missed the leader election
             # self.appendRecord(record)
-            # TODO here, the acceptor detects if it misses some rounds.
-            self.sendMessageToServers("/accept", record.toString())
+            self.sendMessageToServers("/accept", record.toString()) # to learners
 
-    # learner
+    # acceptor => learner
     def accept_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
         received = Record.fromString(recievedMsg)
-        record = self.records[received.roundNumber]
+        roundNumber = received.roundNumber
+        record = self.records[roundNumber]
         if record is None:
             print("I don't have this record, yet.")
-            roundNumber = received.roundNumber
             if len(self.records) <= roundNumber:
                 print("allocate array for record")
                 for _ in range(100):
@@ -155,12 +172,13 @@ class ServerProcess:
 
             self.mutex.acquire()
             try:
-                self.roundNumber = roundNumber
-                self.records[self.roundNumber] = received
+                self.records[roundNumber] = received
+                if self.lastRound < roundNumber:
+                    self.lastRound = roundNumber
             finally:
                 self.mutex.release()
 
-            record = self.records[self.roundNumber]
+            record = self.records[roundNumber]
 
         if record.majorityCheck.addVoteAndCheck() == True:
             record.learned = True
@@ -168,9 +186,16 @@ class ServerProcess:
             print("Learned:", record.toString())
             with open("log_server_" + str(self.pid), 'a') as f_log:
                 f_log.write(record.toString() + "\n")
-
-            print("sending msg to client")
-            self.sendMessageToClients(record.toString())
+            
+            if self.detectHole() != -1:
+                print("do something")
+                self.sendLeaderFaulty()
+            else:
+                print("no holes. sending msg to client")
+                while self.executedRound < self.lastRound:
+                    self.executedRound += 1
+                    recordToExecute = self.records[self.executedRound]
+                    self.sendMessageToClients(recordToExecute.toString())
 
 
     def sendLeaderFaulty(self):
@@ -197,6 +222,14 @@ class ServerProcess:
     def sendMessageToClients(self, message):
         for c in self.clientChannels:
             c.send_message("/processResponse", message)
+
+
+    def detectHole(self):
+        for i in range(self.lastRound):
+            if self.records[i] is None:
+                return i
+
+        return -1
 
 
 # --------- ServerProcess
