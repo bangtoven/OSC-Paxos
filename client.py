@@ -39,7 +39,19 @@ class clientProcess:
 
   def processResponse_handler(self, addr, args, receivedMsg):
     print("\n"+addr)
-    print("Returned, pid,  value: ", receivedMsg)
+    parsed = receivedMsg.split("\t")
+    view = parsed[0]
+    roundNumber = parsed[1]
+    cidMsg = parsed[2]
+    message = parsed[3]
+    print("Returned: roundNumber: {} cid: {} message: {}",format(roundNumber, cid, message))
+    with open("client_log_"+str(self.cid),'a') as f_in:
+      f_in.write(roundNumber)
+      f_in.write(" ")
+      f_in.write(cidMsg)
+      f_in.write(": ")
+      f_in.write(message)
+      f_in.write("\n")
     if self.batch_mode:
       self.sendClientRequest()
   
