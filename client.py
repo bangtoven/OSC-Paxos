@@ -8,14 +8,14 @@ from pythonosc import udp_client, dispatcher, osc_server
 from utils import read_state
 
 class clientProcess:
-  def __int__(self, cid):
+  def __int__(self, cid, server_count, client_count):
     self.cid = cid
     self.batch_mode = False
 
-    self.clientStates = read_state("clients_config")
+    self.clientStates = read_state("clients_config", client_count)
     self.port = self.clientStates[self.cid].port
 
-    self.processStates = read_state("servers_config")
+    self.processStates = read_state("servers_config", server_count)
     self.sendChannels = []
     for p in processStates:
       s = udp_client.SimpleUDPClient(p.ip, p.port)
@@ -65,10 +65,11 @@ class clientProcess:
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--cid", type=int, default=-1, help="the id of the client")
+  parser.add_argument("--server_count", type=int, default=3, help="number of servers")
+  parser.add_argument("--client_count", type=int, default=-1, help="number of clients")
   args = parser.parse_args()
 
-  cid = args.cid
-  client = clientProcess(cid)
+  client = clientProcess(args.cid, args.server_count, args.client_count)
   client.start()
 
 
