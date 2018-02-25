@@ -6,10 +6,12 @@ import threading
 from pythonosc import osc_message_builder
 from pythonosc import udp_client, dispatcher, osc_server
 from utils import read_state
+from message import Message
 
 class clientProcess:
   def __int__(self, cid):
     self.cid = cid
+    self.mid = -1
     self.batch_mode = False
 
     self.clientStates = read_state("clients_config")
@@ -58,8 +60,9 @@ class clientProcess:
   def sendClientRequest(self):
     label = "/clientRequest"
     value = random.randint(1,20)
-    sendingMsg = "{}\t{}".format(str(cid), str(value))
-    self.sendMessageToEveryone(label, sendingMsg, self.sendChannels)
+    self.mid += 1
+    sendingMsg = Message(self.cid, self.mid, value)
+    self.sendMessageToEveryone(label, sendingMsg.toString(), self.sendChannels)
 
 
 if __name__ == "__main__":
