@@ -19,3 +19,29 @@ def read_state(f_name):
 		line_count+=1
 	return process_state_list
 
+def getMsg2Send(pid):
+	msg = ""
+	f_in = open("log_" + str(pid)+".txt",'r')
+	lines = f_in.readlines()
+	count = 0
+	for line in lines:
+		view_number, value = line.split(' ')
+		if count == 0:
+			msg = msg + str(view_number) + ',' + str(value)
+		else:
+			msg = msg + " " + str(view_number) + ',' + str(value)
+	return msg
+	
+def getSendingMsg(view_list, value_list):
+	if len(view_list)>0:
+		count = 0
+		for view,value in zip(view_list, value_list):
+			if count ==0:
+				msg = str(view) + "," + str(value)
+			else:
+				msg = msg + " " + str(view) + ',' + str(value)
+			count +=1
+	else:
+		msg = "empty"
+	return msg
+		
