@@ -8,6 +8,7 @@ from utils import read_state, getSendingMsg
 from record import Record
 from majority import MajorityCheck
 from election import Election
+from message import Message
 
 from threading import Lock
 
@@ -38,6 +39,7 @@ class ServerProcess:
         # multi-paxos
         self.roundNumber = -1  # index for messages
         self.records = []
+        self.buffer = []
         for _ in range(100):
             self.records += [None]
 
@@ -70,7 +72,7 @@ class ServerProcess:
             self.electionStatus = None
             print("It's not my turn to be a leader.")
 
-
+    # acceptor
     def iAmLeader_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
         election = Election.fromString(recievedMsg)
@@ -89,7 +91,7 @@ class ServerProcess:
             elif self.roundNumber == newRound:
                 record = self.records[newRound]
                 if record.learned == False: # only when it is not learned yet
-                    previousValue = record.value
+                    previousValue = record.message
             else:
                 # this guy is missing some records.
                 self.sendLeaderFaulty()
@@ -100,32 +102,34 @@ class ServerProcess:
             leaderChannel = self.sendChannels[newLeader]
             leaderChannel.send_message("/youAreLeader", response.toString())
 
-
+    # new_leader
     def youAreLeader_handler(self, addr, args, recievedMsg):
         print("\n" + addr)
         if self.electionStatus is not None and self.electionStatus.decided == False:
             response = Election.fromString(recievedMsg)
             if response.view > self.electionStatus.view and (response.view % self.totalNumber) != self.pid:  # not me
-                self.electionStatus.latestValue = response.latestValue
+                self.electionStatus.latestValue = Message.fromString(response.latestValue)
 
             if self.electionStatus.majorityCheck.addVoteAndCheck():
                 self.electionStatus.decided = True
                 print("Yeah, I become a leader. Ready to process client requests.")
+                if self.electionStatus.latestValue is not None:
+                    # TODO there's some value accepted but not learned yet.
+                    print("I need to propose this value")
 
-
+    # all processes
     def clientRequest_handler(self, addr, args, recievedMsg):
         print("\n" + addr)
         print("ClientRequest, msg: ", recievedMsg)
-        parsed = recievedMsg.split("\t")
-        cid = parsed[0]
-        value = parsed[1]
+        message = Message.fromString(recievedMsg)
         if (self.view % self.totalNumber == self.pid):
-            # TODO detecting and do appropriate thing.
             self.roundNumber += 1
-            record = Record(self.view, self.roundNumber, cid, value)
+            record = Record(self.view, self.roundNumber, message)
             self.sendMessageToServers("/valueProposal", record.toString())
+        else:
+            self.buffer.append(message)
 
-
+    # acceptor
     def valueProposal_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
         record = Record.fromString(recievedMsg)
@@ -136,35 +140,9 @@ class ServerProcess:
             # TODO here, the acceptor detects if it misses some rounds.
             self.sendMessageToServers("/accept", record.toString())
 
-
+    # learner
     def accept_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
-        # #create dict of records, count, if enough, write to log, send to client. In client just print the value
-        # #go back to the start and see what would happen if the second client sends a msg, accordingly change the view storage etc etc
-        #
-        # recordStr = str(roundNumber) + "," + str(value)
-        # print("recordStr: ", recordStr)
-        # if recordStr not in self.recordDict:
-        #     print("recordString not in dict")
-        #     self.recordDict[recordStr] = Record(roundNumber, value)
-        #     self.recordDict[recordStr].count +=1
-        # else:
-        #     self.recordDict[recordStr].count +=1
-        #
-        # if self.recordDict[recordStr].learned == False:
-        #     print("recordstr learned is false, count", self.recordDict[recordStr].count)
-        #     if self.recordDict[recordStr].count > self.totalNumber / 2:
-        #         self.recordDict[recordStr].learned = True
-        #         with open("log_"+str(self.pid),'a') as f_log:
-        #             f_log.write(str(roundNumber))
-        #             f_log.write(" ")
-        #             f_log.write(value)
-        #             f_log.write("\n")
-        #         print("sending msg to client")
-        #         clientChannel = self.clientChannels[int(cid)]
-        #         sendingMsg = "{}\t{}".format(self.pid, value)
-        #         clientChannel.send_message("/processResponse", sendingMsg)
-
         received = Record.fromString(recievedMsg)
         record = self.records[received.roundNumber]
         if record is None:
@@ -186,13 +164,13 @@ class ServerProcess:
 
         if record.majorityCheck.addVoteAndCheck() == True:
             record.learned = True
+            self.buffer.remove(record.message)
             print("Learned:", record.toString())
             with open("log_server_" + str(self.pid), 'a') as f_log:
                 f_log.write(record.toString() + "\n")
 
             print("sending msg to client")
             self.sendMessageToClients(record.toString())
-
 
 
     def sendLeaderFaulty(self):

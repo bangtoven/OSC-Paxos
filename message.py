@@ -4,6 +4,12 @@ class Message:
         self.mid = int(mid) # message id of that specific client
         self.value = value
 
+    def __eq__(self, other):
+        """Overrides the default implementation"""
+        if isinstance(self, other.__class__):
+            return self.cid == other.cid and self.mid == other.mid
+        return NotImplemented
+
     @classmethod
     def fromString(cls, string):
         parsed = string.split("\t")
