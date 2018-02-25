@@ -5,7 +5,7 @@ class process_state:
 		self.pid = pid_val
 		self.fault = False
 
-def read_state(f_name):
+def read_state(f_name, count):
 	f_in = open(f_name, 'r')
 	lines = f_in.readlines()
 	process_state_list = []
@@ -17,7 +17,7 @@ def read_state(f_name):
 		process_state_temp = process_state(ip, port, line_count)
 		process_state_list.append(process_state_temp)
 		line_count+=1
-	return process_state_list
+	return process_state_list[0:count]
 
 def getMsg2Send(pid):
 	msg = ""

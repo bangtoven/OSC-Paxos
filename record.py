@@ -4,8 +4,8 @@ class Record:
     def __init__(self, view, roundNumber, cid, message):
         self.roundNumber = roundNumber
         self.view = view # when it is generated.
-	self.cid = cid # who sent it
-	self.message = message 
+        self.cid = cid # who sent it
+        self.message = message 
         self.majorityCheck = MajorityCheck()
         self.learned = False
         self.count = 0
