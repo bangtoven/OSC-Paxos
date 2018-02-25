@@ -8,6 +8,7 @@ from utils import read_state, getSendingMsg
 from record import Record
 from majority import MajorityCheck
 from election import Election
+from message import Message
 
 from threading import Lock
 
@@ -116,13 +117,11 @@ class ServerProcess:
     def clientRequest_handler(self, addr, args, recievedMsg):
         print("\n" + addr)
         print("ClientRequest, msg: ", recievedMsg)
-        parsed = recievedMsg.split("\t")
-        cid = parsed[0]
-        value = parsed[1]
+        message = Message.fromString(recievedMsg)
         if (self.view % self.totalNumber == self.pid):
             # TODO detecting and do appropriate thing.
             self.roundNumber += 1
-            record = Record(self.view, self.roundNumber, cid, value)
+            record = Record(self.view, self.roundNumber, message)
             self.sendMessageToServers("/valueProposal", record.toString())
 
 
