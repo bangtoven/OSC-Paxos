@@ -1,12 +1,14 @@
 from majority import MajorityCheck
 
 class Record:
-    def __init__(self, roundNumber, value):
+    def __init__(self, view, roundNumber, cid, message):
         self.roundNumber = roundNumber
-        self.value = value
+        self.view = view # when it is generated.
+	self.cid = cid # who sent it
+	self.message = message 
         self.majorityCheck = MajorityCheck()
         self.learned = False
         self.count = 0
 
     def toString(self):
-        "{} {}".format(self.roundNumber, self.value)
+        "{}\t{}\t{}\t{}".format(self.view, self.roundNumber, self.value, self.cid)
