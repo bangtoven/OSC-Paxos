@@ -18,7 +18,7 @@ class ClientProcess:
 
     self.cid = cid
     self.mid = -1
-    self.batch_mode = False
+    self.batch_mode = True
 
     self.clientStates = read_state("clients_config", client_count)
     self.port = self.clientStates[self.cid].port
@@ -44,7 +44,7 @@ class ClientProcess:
 
   def sendMessageToEveryone(self, label, sendingMsg):
     print("Sending Client request: ", sendingMsg)
-    for i,s in enumerate(sendChannels):
+    for i,s in enumerate(self.sendChannels):
       sendMessageWithLoss(s, label, sendingMsg, self.lossRate)
       # s.send_message(label,sendingMsg)
 
@@ -52,11 +52,13 @@ class ClientProcess:
     print("\n"+addr)
     recieved = Record.fromString(recievedMsg)
     print("Returned: roundNumber: {} cid: {} message_value: {}".format(recieved.roundNumber, recieved.message.cid, recieved.message.value))
+    print("lognumber:", self.logRoundNumber)
     if recieved.roundNumber not in self.responses:
+      print("inside")
       self.responses[recieved.roundNumber] = recieved
     if self.logRoundNumber + 1 == recieved.roundNumber:
       self.addToLog(recieved)
-    elif self.logRoundNUmber+1 < recieved.roundNumber:
+    elif self.logRoundNumber+1 < recieved.roundNumber:
       #self.askResponseFromServer()
       print("ask  response from server")
       roundNumberTemp = self.logRoundNumber+1
@@ -66,8 +68,8 @@ class ClientProcess:
         roundNumberTemp +=1
         #elif logRoundNumber + 1 
       
-    if self.batch_mode:
-      self.sendClientRequest()
+    #if self.batch_mode:
+    #  self.sendClientRequest()
 
 
   def missingValue_handler(self, addr, args, recievedMsg):
@@ -80,18 +82,21 @@ class ClientProcess:
   
   def addToLog(self, recieved):
     with open("client_log_"+str(self.cid),'a') as f_in:
-      f_in.write(recieved.roundNumber)
+      f_in.write(str(recieved.roundNumber))
       f_in.write(" ")
-      f_in.write(recieved.message.cid)
+      f_in.write(str(recieved.message.cid))
       f_in.write(": ")
       f_in.write(recieved.message.value)
       f_in.write("\n")
       self.logRoundNumber +=1
+    if self.batch_mode:
+        self.sendClientRequest()
 
 
   def sendClientRequest(self):
     label = "/clientRequest"
-    value = random.randint(1,20)
+    #value = random.randint(1,20)
+    value = input(str(self.cid) + ": ")
     self.mid += 1
     sendingMsg = Message(self.cid, self.mid, value)
     self.sendMessageToEveryone(label, sendingMsg.toString())

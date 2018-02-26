@@ -108,13 +108,13 @@ class ServerProcess:
                 #update learning based on view number and if it learned, mark it (things to learn from others)
                 #use for loop to send one by one with round number
                 previousValue = None
-                count = (newRound-1) - self.lastRound
+                #count = (newRound-1) - self.lastRound
                 roundNumberTemp = self.lastRound +1
-                while roundNumberTemp < newRound -1:
+                while roundNumberTemp < newRound:
                     sendingMsg = "server\t{}\t{}".format(str(self.pid),str(roundNumberTemp))
                     self.sendMessageToServers("/requestMissingValue", sendingMsg)
                     roundNumberTemp +=1
-            else:
+            elif self.lastRound > newRound:
                 # this guy is missing some records.
                 self.sendLeaderFaulty()
                 return
@@ -134,8 +134,9 @@ class ServerProcess:
         uid = int(parsed[1])
         roundNumber = int(parsed[2])
         if name == server:
-            if self.lastRound >= roundNumber:
+            if self.lastRound >= roundNumber and self.records[roundNumber] != None:
                 record = self.records[roundNumber]
+                #if record.learned:
                 responseChannel = self.sendChannels[uid]
                 responseChannel.send_message("/missingValue",record.toString())
 
@@ -144,6 +145,12 @@ class ServerProcess:
             responseChannel = self.clientChannels[uid]
             responseChannel.send_message("/missingValue",record.toString())
 
+    def sendAccept(self, record):
+        if self.lastRound < record.roundNumber:
+            self.lastRound = record.roundNumber # why is the lastround jumping to round number
+
+        self.sendMessageToServers("/accept", record.toString())
+
     #server => requester
     def missingValue_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
@@ -151,10 +158,16 @@ class ServerProcess:
         recieved = Record.fromString(recievedMsg)
         record = self.records[recieved.roundNumber]
         if record == None:
-            self.records[recieved.roundNumber] = recieved #doubt: what happens to the lastround, how to update it?   
-        elif record.learned == False:
-            if recieved.view >= record.view:
-                self.records[recieved.roundNumber] = recieved
+            #recieved.learned = True
+            self.sendAccept(recieved)
+            #self.records[recieved.roundNumber] = recieved #doubt: what happens to the lastround, how to update it?
+        # elif record.learned == False:
+        #     if recieved.view >= record.view:
+        #         recieved.learned = True
+        #         self.records[recieved.roundNumber] = recieved
+        #         if self.lastRound < recieved.roundNumber:
+        #             self.lastRound = recieved.roundNumber
+
 
     # acceptor => new leader
     def youAreLeader_handler(self, addr, args, recievedMsg):
@@ -208,7 +221,8 @@ class ServerProcess:
         if record.view >= self.view:
             self.view = record.view # in case you missed the leader election
             # self.appendRecord(record)
-            self.sendMessageToServers("/accept", record.toString()) # to learners
+            self.sendAccept(record)
+            # self.sendMessageToServers("/accept", record.toString()) # to learners
 
     # acceptor => learner
     def accept_handler(self, addr, args, recievedMsg):
@@ -226,8 +240,6 @@ class ServerProcess:
             self.mutex.acquire()
             try:
                 self.records[roundNumber] = received
-                if self.lastRound < roundNumber:
-                    self.lastRound = roundNumber #why is the lastround jumping to round number
             finally:
                 self.mutex.release()
 
