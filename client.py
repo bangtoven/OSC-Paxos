@@ -30,6 +30,9 @@ class ClientProcess:
     self.logRoundNumber = -1
     self.responses = {}
 
+    self.view = -1
+    self.received = False
+
   def start(self):  
     d = dispatcher.Dispatcher()
     d.map("/processResponse", self.processResponse_handler, "receivedMsg")
@@ -55,7 +58,9 @@ class ClientProcess:
     print("lognumber:", self.logRoundNumber)
     if recieved.roundNumber not in self.responses:
       print("inside")
+      self.view = recieved.view
       self.responses[recieved.roundNumber] = recieved
+
     if self.logRoundNumber + 1 == recieved.roundNumber:
       self.addToLog(recieved)
     elif self.logRoundNumber+1 < recieved.roundNumber:
@@ -69,6 +74,7 @@ class ClientProcess:
         #elif logRoundNumber + 1
 
     if self.batch_mode and recieved.message.cid == self.cid and recieved.message.mid == self.mid:
+        self.received = True
         time.sleep(0.5)
         self.sendClientRequest()
 
@@ -96,12 +102,20 @@ class ClientProcess:
 
 
   def sendClientRequest(self):
+    self.received = False
+    t = threading.Timer(3.0, self.checkReceived)
+    t.start()
+
     label = "/clientRequest"
     #value = random.randint(1,20)
     value = input(str(self.cid) + ": ")
     self.mid += 1
     sendingMsg = Message(self.cid, self.mid, value)
     self.sendMessageToEveryone(label, sendingMsg.toString())
+
+  def checkReceived(self):
+      if self.received == False:
+          self.sendMessageToEveryone("/leaderFaulty", self.view)
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
