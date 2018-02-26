@@ -11,7 +11,7 @@ from record import Record
 from threading import Lock
 
 class ClientProcess:
-  def __init__(self, cid, server_count, client_count, message_loss):
+  def __init__(self, cid, server_count, client_count, message_loss, batch_mode):
     if message_loss in range(0, 100):
       self.lossRate = message_loss / 100.0
     else:
@@ -20,7 +20,7 @@ class ClientProcess:
     self.mutex = Lock()
     self.cid = cid
     self.mid = -1
-    self.batch_mode = True
+    self.batch_mode = batch_mode == 1
 
     self.clientStates = read_state("clients_config", client_count)
     self.port = self.clientStates[self.cid].port
@@ -75,7 +75,7 @@ class ClientProcess:
         roundNumberTemp +=1
         #elif logRoundNumber + 1
 
-    if self.batch_mode and recieved.message.cid == self.cid and recieved.message.mid == self.mid:
+    if recieved.message.cid == self.cid and recieved.message.mid == self.mid:
         self.received = True
         time.sleep(0.5)
         self.sendClientRequest()
@@ -108,7 +108,10 @@ class ClientProcess:
     t.start()
 
     label = "/clientRequest"
-    value = input(str(self.cid) + ": ")
+    if self.batch_mode:
+      value = random.randint(1,100)
+    else:
+      value = input(str(self.cid) + ": ")
     self.mid += 1
     sendingMsg = Message(self.cid, self.mid, value)
     self.sendMessageToEveryone(label, sendingMsg.toString())
@@ -123,9 +126,10 @@ if __name__ == "__main__":
   parser.add_argument("--server_count", type=int, default=3, help="number of servers")
   parser.add_argument("--client_count", type=int, default=-1, help="number of clients")
   parser.add_argument("--message_loss", type=float, default=0.0, help="test5: randomly drop p%")
+  parser.add_argument("--batch_mode", type=int, default = 0,  help="batch_mode")
   args = parser.parse_args()
 
-  client = ClientProcess(args.cid, args.server_count, args.client_count, args.message_loss)
+  client = ClientProcess(args.cid, args.server_count, args.client_count, args.message_loss, args.batch_mode)
   client.start()
 
 
