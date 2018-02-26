@@ -66,10 +66,11 @@ class ClientProcess:
         sendingMsg = "client\t{}\t{}".format(str(self.cid),str(roundNumberTemp))
         self.sendMessageToEveryone("/requestMissingValue", sendingMsg)
         roundNumberTemp +=1
-        #elif logRoundNumber + 1 
+        #elif logRoundNumber + 1
 
     if self.batch_mode and recieved.message.cid == self.cid and recieved.message.mid == self.mid:
-      self.sendClientRequest()
+        time.sleep(0.5)
+        self.sendClientRequest()
 
     #if self.batch_mode:
     #  self.sendClientRequest()
