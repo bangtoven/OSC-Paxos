@@ -47,21 +47,21 @@ class ClientProcess:
     print("Returned: roundNumber: {} cid: {} message_value: {}".format(recieved.roundNumber, recieved.message.cid, recieved.message.value))
     if recieved.roundNumber not in self.responses:
       self.responses[recieved.roundNumber] = recieved
-      if logRoundNumber + 1 == recieved.roundNumber:
+      if self.logRoundNumber + 1 == recieved.roundNumber:
         with open("client_log_"+str(self.cid),'a') as f_in:
-        f_in.write(roundNumber)
-        f_in.write(" ")
-        f_in.write(cidMsg)
-        f_in.write(": ")
-        f_in.write(message)
-        f_in.write("\n")
-        logRoundNumber +=1
+            f_in.write(roundNumber)
+            f_in.write(" ")
+            f_in.write(cidMsg)
+            f_in.write(": ")
+            f_in.write(message)
+            f_in.write("\n")
+            self.logRoundNumber +=1
       else:
         #self.askResponseFromServer()
         print("ask  response from server")
     #elif logRoundNumber + 1 
       
-    """
+
     if self.batch_mode:
       self.sendClientRequest()
 

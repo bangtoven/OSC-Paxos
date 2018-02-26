@@ -79,7 +79,7 @@ class ServerProcess:
         election = Election.fromString(recievedMsg)
         newView = election.view
         newLeader = newView % self.totalNumber
-        newRound = election.lastRound
+        newRound = election.roundNumber
         print("Process {} sent iAmLeader.".format(newLeader))
 
         if newView >= self.view:
@@ -182,7 +182,10 @@ class ServerProcess:
 
         if record.majorityCheck.addVoteAndCheck() == True:
             record.learned = True
-            self.buffer.remove(record.message)
+
+            if record.message in self.buffer:
+                self.buffer.remove(record.message)
+
             print("Learned:", record.toString())
             with open("log_server_" + str(self.pid), 'a') as f_log:
                 f_log.write(record.toString() + "\n")
