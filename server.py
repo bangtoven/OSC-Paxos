@@ -4,16 +4,22 @@ import time
 from pythonosc import dispatcher
 from pythonosc import osc_server
 from pythonosc import udp_client
-from utils import read_state, getSendingMsg
+from utils import read_state, sendMessageWithLoss
 from record import Record
 from majority import MajorityCheck
 from election import Election
 from message import Message
-
 from threading import Lock
 
 class ServerProcess:
-    def __init__(self, pid, server_count, client_count):
+    def __init__(self, pid, server_count, client_count, skipped_slot, message_loss):
+        # test simulation parameters
+        self.skipped_slot = skipped_slot
+        if message_loss in range (0, 100):
+            self.lossRate = message_loss/100.0
+        else:
+            self.lossRate = 0.0
+
         self.mutex = Lock()
 
         self.pid = pid
@@ -116,7 +122,8 @@ class ServerProcess:
             print("Sending youAreLeader...")
             response = Election(previousView, self.lastRound, previousValue)
             leaderChannel = self.sendChannels[newLeader]
-            leaderChannel.send_message("/youAreLeader", response.toString())
+            # leaderChannel.send_message("/youAreLeader", response.toString())
+            sendMessageWithLoss(leaderChannel, "/youAreLeader", response.toString(), self.lossRate)
 
 
     #acceptor => server
@@ -178,11 +185,14 @@ class ServerProcess:
         print("\n" + addr)
         print("ClientRequest, msg: ", recievedMsg)
         message = Message.fromString(recievedMsg)
-        if (self.view % self.totalNumber == self.pid):
+        if (self.view % self.totalNumber == self.pid): # leader's work
             self.lastRound += 1
-            record = Record(self.view, self.lastRound, message)
-            self.propose(record)
-        else:
+            if self.lastRound == self.skipped_slot:
+                print("simulate sequence skipping. incrementing the round, but not proposing the value.")
+            else:
+                record = Record(self.view, self.lastRound, message)
+                self.propose(record)
+        else: # other processes
             self.buffer.append(message)
 
     # leader => acceptor
@@ -261,13 +271,14 @@ class ServerProcess:
         for i, s in enumerate(self.sendChannels):
             if i == self.pid and exceptMe:
                 continue
-            s.send_message(label, value)
-            # time.sleep(0.5)
+            # s.send_message(label, value)
+            sendMessageWithLoss(s, label, value, self.lossRate)
 
 
     def sendMessageToClients(self, message):
         for c in self.clientChannels:
-            c.send_message("/processResponse", message)
+            # c.send_message("/processResponse", message)
+            sendMessageWithLoss(c, "/processResponse", message, self.lossRate)
 
 
     def detectHole(self):
@@ -286,8 +297,10 @@ if __name__ == "__main__":
     parser.add_argument("--pid", type=int, default=-1, help="The id of the process")
     parser.add_argument("--server_count", type=int, default=3, help="number of servers")
     parser.add_argument("--client_count", type=int, default=2, help="number of clients")
+    parser.add_argument("--skipped_slot", type=int, default=-1, help="test4: force primary to skip for sequence x")
+    parser.add_argument("--message_loss", type=int, default=0, help="test5: randomly drop p%. range(0,100)")
     args = parser.parse_args()
 
-    server = ServerProcess(args.pid, args.server_count, args.client_count)
+    server = ServerProcess(args.pid, args.server_count, args.client_count, args.skipped_slot, args.message_loss)
     server.start()
 

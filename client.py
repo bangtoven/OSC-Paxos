@@ -5,12 +5,17 @@ import threading
 
 from pythonosc import osc_message_builder
 from pythonosc import udp_client, dispatcher, osc_server
-from utils import read_state
+from utils import read_state, sendMessageWithLoss
 from message import Message
 from record import Record
 
 class ClientProcess:
-  def __init__(self, cid, server_count, client_count):
+  def __init__(self, cid, server_count, client_count, message_loss):
+    if message_loss in range(0, 100):
+      self.lossRate = message_loss / 100.0
+    else:
+      self.lossRate = 0.0
+
     self.cid = cid
     self.mid = -1
     self.batch_mode = False
@@ -39,8 +44,9 @@ class ClientProcess:
 
   def sendMessageToEveryone(self, label, sendingMsg):
     print("Sending Client request: ", sendingMsg)
-    for i,s in enumerate(self.sendChannels):
-      s.send_message(label,sendingMsg)
+    for i,s in enumerate(sendChannels):
+      sendMessageWithLoss(s, label, sendingMsg, self.lossRate)
+      # s.send_message(label,sendingMsg)
 
   def processResponse_handler(self, addr, args, recievedMsg):
     print("\n"+addr)
@@ -95,9 +101,10 @@ if __name__ == "__main__":
   parser.add_argument("--cid", type=int, default=-1, help="the id of the client")
   parser.add_argument("--server_count", type=int, default=3, help="number of servers")
   parser.add_argument("--client_count", type=int, default=-1, help="number of clients")
+  parser.add_argument("--message_loss", type=float, default=0.0, help="test5: randomly drop p%")
   args = parser.parse_args()
 
-  client = ClientProcess(args.cid, args.server_count, args.client_count)
+  client = ClientProcess(args.cid, args.server_count, args.client_count, args.message_loss)
   client.start()
 
 
