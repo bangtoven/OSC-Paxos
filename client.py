@@ -28,6 +28,7 @@ class ClientProcess:
   def start(self):  
     d = dispatcher.Dispatcher()
     d.map("/processResponse", self.processResponse_handler, "receivedMsg")
+    d.map("/missingValue", self.missingValue_handler, "receivedMsg")
 
     listen = osc_server.ThreadingOSCUDPServer(("127.0.0.1", self.port), d)
     listeningThread = threading.Thread(target=listen.serve_forever)
@@ -36,41 +37,58 @@ class ClientProcess:
 
     self.sendClientRequest()
 
-  def sendMessageToEveryone(self, label, sendingMsg, sendChannels):
+  def sendMessageToEveryone(self, label, sendingMsg):
     print("Sending Client request: ", sendingMsg)
-    for i,s in enumerate(sendChannels):
+    for i,s in enumerate(self.sendChannels):
       s.send_message(label,sendingMsg)
 
-  def processResponse_handler(self, addr, args, receivedMsg):
+  def processResponse_handler(self, addr, args, recievedMsg):
     print("\n"+addr)
-    recieved = Record.fromString(receivedMsg)
+    recieved = Record.fromString(recievedMsg)
     print("Returned: roundNumber: {} cid: {} message_value: {}".format(recieved.roundNumber, recieved.message.cid, recieved.message.value))
     if recieved.roundNumber not in self.responses:
       self.responses[recieved.roundNumber] = recieved
-      if self.logRoundNumber + 1 == recieved.roundNumber:
-        with open("client_log_"+str(self.cid),'a') as f_in:
-            f_in.write(roundNumber)
-            f_in.write(" ")
-            f_in.write(cidMsg)
-            f_in.write(": ")
-            f_in.write(message)
-            f_in.write("\n")
-            self.logRoundNumber +=1
-      else:
-        #self.askResponseFromServer()
-        print("ask  response from server")
-    #elif logRoundNumber + 1 
+    if self.logRoundNumber + 1 == recieved.roundNumber:
+      self.addToLog(recieved)
+    elif self.logRoundNUmber+1 < recieved.roundNumber:
+      #self.askResponseFromServer()
+      print("ask  response from server")
+      roundNumberTemp = self.logRoundNumber+1
+      while roundNumberTemp <= recieved.roundNumber:
+        sendingMsg = "client\t{}\t{}".format(str(self.cid),str(roundNumberTemp))
+        self.sendMessageToEveryone("/requestMissingValue", sendingMsg)
+        roundNumberTemp +=1
+        #elif logRoundNumber + 1 
       
-
     if self.batch_mode:
       self.sendClientRequest()
+
+
+  def missingValue_handler(self, addr, args, recievedMsg):
+    print("\n"+addr)
+    recieved = Record.fromString(recievedMsg)
+    if recieved.roundNumber not in self.responses:
+      self.responses[recieved.roundNumber] = recieved
+    if self.logRoundNumber + 1 == recieved.roundNumber:
+      self.addToLog(recieved)
+  
+  def addToLog(self, recieved):
+    with open("client_log_"+str(self.cid),'a') as f_in:
+      f_in.write(recieved.roundNumber)
+      f_in.write(" ")
+      f_in.write(recieved.message.cid)
+      f_in.write(": ")
+      f_in.write(recieved.message.value)
+      f_in.write("\n")
+      self.logRoundNumber +=1
+
 
   def sendClientRequest(self):
     label = "/clientRequest"
     value = random.randint(1,20)
     self.mid += 1
     sendingMsg = Message(self.cid, self.mid, value)
-    self.sendMessageToEveryone(label, sendingMsg.toString(), self.sendChannels)
+    self.sendMessageToEveryone(label, sendingMsg.toString())
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()

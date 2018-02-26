@@ -54,6 +54,8 @@ class ServerProcess:
         d.map("/accept", self.accept_handler, self)
         d.map("/leaderFaulty", self.leaderFaulty_handler, self)
         d.map("/clientRequest", self.clientRequest_handler, self)
+        d.map("/requestMissingValue", self.requestMissingValue_handler, self)
+        d.map("/missingValue", self.missingValue_handler, self)
 
         listen = osc_server.ThreadingOSCUDPServer(("127.0.0.1", self.port), d)
         listeningThread = threading.Thread(target=listen.serve_forever)
@@ -96,6 +98,16 @@ class ServerProcess:
             elif self.lastRound < newRound:
                 print("I am missing something")
                 # TODO ask other server for the missing value
+                #should send previous value as None and learn it only if it has already been learned or learn it anyways?
+                #update learning based on view number and if it learned, mark it (things to learn from others)
+                #use for loop to send one by one with round number
+                previousValue = None
+                count = (newRound-1) - self.lastRound
+                roundNumberTemp = self.lastRound +1
+                while roundNumberTemp < newRound -1:
+                    sendingMsg = "server\t{}\t{}".format(str(self.pid),str(roundNumberTemp))
+                    self.sendMessageToServers("/requestMissingValue", sendingMsg)
+                    roundNumberTemp +=1
             else:
                 # this guy is missing some records.
                 self.sendLeaderFaulty()
@@ -105,6 +117,37 @@ class ServerProcess:
             response = Election(previousView, self.lastRound, previousValue)
             leaderChannel = self.sendChannels[newLeader]
             leaderChannel.send_message("/youAreLeader", response.toString())
+
+
+    #acceptor => server
+    def requestMissingValue_handler(self, addr, args, recievedMsg):
+        print("\n"+addr)
+        parsed = recievedMsg.split("\t")
+        name = parsed[0]
+        uid = int(parsed[1])
+        roundNumber = int(parsed[2])
+        if name == server:
+            if self.lastRound >= roundNumber:
+                record = self.records[roundNumber]
+                responseChannel = self.sendChannels[uid]
+                responseChannel.send_message("/missingValue",record.toString())
+
+        elif self.executedRound >= roundNumber:
+            record = self.records[roundNumber]
+            responseChannel = self.clientChannels[uid]
+            responseChannel.send_message("/missingValue",record.toString())
+
+    #server => requester
+    def missingValue_handler(self, addr, args, recievedMsg):
+        print("\n"+addr)
+        #doubt: should we check if enough records are available and add them?
+        recieved = Record.fromString(recievedMsg)
+        record = self.records[recieved.roundNumber]
+        if record == None:
+            self.records[recieved.roundNumber] = recieved #doubt: what happens to the lastround, how to update it?   
+        elif record.learned == False:
+            if recieved.view >= record.view:
+                self.records[recieved.roundNumber] = recieved
 
     # acceptor => new leader
     def youAreLeader_handler(self, addr, args, recievedMsg):
@@ -123,7 +166,7 @@ class ServerProcess:
                     filling = Record(self.view, hole, self.buffer[0])
                     self.propose(filling)
 
-                if self.electionStatus.latestValue is not None:
+                if self.electionStatus.latestValue is not None: #doubt, why is this here?
                     latestMsg = Message(self.electionStatus.latestValue)
                     fromPrevious = Record(self.view, response.roundNumber, latestMsg)
                     self.propose(fromPrevious)
@@ -174,7 +217,7 @@ class ServerProcess:
             try:
                 self.records[roundNumber] = received
                 if self.lastRound < roundNumber:
-                    self.lastRound = roundNumber
+                    self.lastRound = roundNumber #why is the lastround jumping to round number
             finally:
                 self.mutex.release()
 
