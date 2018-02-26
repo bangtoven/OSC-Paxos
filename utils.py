@@ -1,4 +1,5 @@
-from random import choices
+#from random import choices
+import random
 
 class process_state:
 	def __init__(self, ip_val, port_val, pid_val):
@@ -26,7 +27,7 @@ def sendMessageWithLoss(channel, label, value, lossRate):
 		channel.send_message(label, value)
 	else:
 		success = 1.0 - lossRate
-		if choices([True, False], [success, lossRate]):
+		if random.choices([True, False], [success, lossRate]):
 			channel.send_message(label, value)
 		else:
 			print("message dropped by simulated loss.")

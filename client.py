@@ -88,10 +88,10 @@ class ClientProcess:
       f_in.write("\n")
       self.logRoundNumber +=1
 
-
   def sendClientRequest(self):
     label = "/clientRequest"
-    value = random.randint(1,20)
+    #value = random.randint(1,20)
+    value = raw_input(str(self.cid)+" You: ")
     self.mid += 1
     sendingMsg = Message(self.cid, self.mid, value)
     self.sendMessageToEveryone(label, sendingMsg.toString())
