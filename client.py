@@ -62,14 +62,9 @@ class ClientProcess:
       self.view = recieved.view
       self.responses[recieved.roundNumber] = recieved
 
-    self.mutex.acquire()
-    try:
-      if self.logRoundNumber + 1 == recieved.roundNumber:
-          self.logRoundNumber +=1
-    finally:
-      self.mutex.release()
-    self.addToLog(recieved)
-
+    if self.logRoundNumber + 1 == recieved.roundNumber:
+      self.logRoundNumber += 1
+      self.addToLog(recieved)
     elif self.logRoundNumber+1 < recieved.roundNumber:
       #self.askResponseFromServer()
       print("ask  response from server")
