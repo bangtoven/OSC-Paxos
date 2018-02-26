@@ -8,6 +8,7 @@ from pythonosc import udp_client, dispatcher, osc_server
 from utils import read_state, sendMessageWithLoss
 from message import Message
 from record import Record
+from threading import Lock
 
 class ClientProcess:
   def __init__(self, cid, server_count, client_count, message_loss):
@@ -16,6 +17,7 @@ class ClientProcess:
     else:
       self.lossRate = 0.0
 
+    self.mutex = Lock()
     self.cid = cid
     self.mid = -1
     self.batch_mode = True
@@ -54,10 +56,14 @@ class ClientProcess:
     print("Returned: roundNumber: {} cid: {} message_value: {}".format(recieved.roundNumber, recieved.message.cid, recieved.message.value))
     print("lognumber:", self.logRoundNumber)
     if recieved.roundNumber not in self.responses:
-      print("inside")
       self.responses[recieved.roundNumber] = recieved
     if self.logRoundNumber + 1 == recieved.roundNumber:
-      self.addToLog(recieved)
+      self.mutex.acquire()
+      try:
+        self.logRoundNumber +=1
+        self.addToLog(recieved)
+      finally:
+        self.mutex.release()
     elif self.logRoundNumber+1 < recieved.roundNumber:
       #self.askResponseFromServer()
       print("ask  response from server")
@@ -92,7 +98,7 @@ class ClientProcess:
       f_in.write(": ")
       f_in.write(recieved.message.value)
       f_in.write("\n")
-      self.logRoundNumber +=1
+      #self.logRoundNumber +=1
 
   def sendClientRequest(self):
     label = "/clientRequest"
