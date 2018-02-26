@@ -66,8 +66,12 @@ class ClientProcess:
         sendingMsg = "client\t{}\t{}".format(str(self.cid),str(roundNumberTemp))
         self.sendMessageToEveryone("/requestMissingValue", sendingMsg)
         roundNumberTemp +=1
-        #elif logRoundNumber + 1 
-      
+        #elif logRoundNumber + 1
+
+    if self.batch_mode and recieved.message.cid == self.cid and recieved.message.mid == self.mid:
+        time.sleep(0.5)
+        self.sendClientRequest()
+
     #if self.batch_mode:
     #  self.sendClientRequest()
 
@@ -89,8 +93,6 @@ class ClientProcess:
       f_in.write(recieved.message.value)
       f_in.write("\n")
       self.logRoundNumber +=1
-    if self.batch_mode:
-        self.sendClientRequest()
 
   def sendClientRequest(self):
     label = "/clientRequest"
