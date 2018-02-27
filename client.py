@@ -32,7 +32,7 @@ class ClientProcess:
     self.logRoundNumber = -1
     self.responses = {}
 
-    self.view = -1
+    self.view = 0
     self.received = False
 
   def start(self):  
@@ -48,7 +48,7 @@ class ClientProcess:
     self.sendClientRequest()
 
   def sendMessageToEveryone(self, label, sendingMsg):
-    print("Sending Client request: ", sendingMsg)
+    print("Sending Client request: ",label, sendingMsg)
     for i,s in enumerate(self.sendChannels):
       sendMessageWithLoss(s, label, sendingMsg, self.lossRate)
       # s.send_message(label,sendingMsg)
@@ -57,10 +57,12 @@ class ClientProcess:
     print("\n"+addr)
     recieved = Record.fromString(recievedMsg)
     print("Returned: roundNumber: {} cid: {} message_value: {}".format(recieved.roundNumber, recieved.message.cid, recieved.message.value))
-    print("lognumber:", self.logRoundNumber)
+    #print("lognumber:", self.logRoundNumber)
+    notInResponses = False
     if recieved.roundNumber not in self.responses:
       self.view = recieved.view
       self.responses[recieved.roundNumber] = recieved
+      notInResponses = True
 
     if self.logRoundNumber + 1 == recieved.roundNumber:
       self.logRoundNumber += 1
@@ -75,9 +77,10 @@ class ClientProcess:
         roundNumberTemp +=1
         #elif logRoundNumber + 1
 
-    if recieved.message.cid == self.cid and recieved.message.mid == self.mid:
+    if recieved.message.cid == self.cid and recieved.message.mid == self.mid and notInResponses:
+        print("inside check function")
         self.received = True
-        time.sleep(0.5)
+        time.sleep(2)
         self.sendClientRequest()
 
     #if self.batch_mode:
@@ -90,7 +93,9 @@ class ClientProcess:
     if recieved.roundNumber not in self.responses:
       self.responses[recieved.roundNumber] = recieved
     if self.logRoundNumber + 1 == recieved.roundNumber:
+      self.logRoundNumber +=1
       self.addToLog(recieved)
+      
   
   def addToLog(self, recieved):
     with open("client_log_"+str(self.cid),'a') as f_in:
@@ -103,20 +108,23 @@ class ClientProcess:
       #self.logRoundNumber +=1
 
   def sendClientRequest(self):
-    self.received = False
-    t = threading.Timer(3.0, self.checkReceived)
-    t.start()
-
     label = "/clientRequest"
     if self.batch_mode:
-      value = random.randint(1,100)
+      if self.logRoundNumber<20:
+        value = random.randint(1,100)
+      else:
+        exit(0)
     else:
       value = input(str(self.cid) + ": ")
     self.mid += 1
     sendingMsg = Message(self.cid, self.mid, value)
+    self.received = False
     self.sendMessageToEveryone(label, sendingMsg.toString())
+    t = threading.Timer(3.0, self.checkReceived)
+    t.start()
 
   def checkReceived(self):
+      print("inside check recieved", self.received)
       if self.received == False:
           self.sendMessageToEveryone("/leaderFaulty", self.view)
 
