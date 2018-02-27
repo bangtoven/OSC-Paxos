@@ -1,0 +1,27 @@
+Jungho Bang (bjungho@umich.edu)
+Janarthanan Rajendran (rjana@umich.edu)
+
+0. configuration
+servers_config, clients_config have list of IP and port of processes
+
+1. script mode
+pythone3 script_mode.py [--server_count SERVER_COUNT]
+                        [--client_count CLIENT_COUNT]
+                        [--skipped_slot SKIPPED_SLOT] test4: force primary to skip for sequence x
+                        [--message_loss MESSAGE_LOSS] test5: randomly drop p%. range(0,100)
+                        [--batch_mode BATCH_MODE] set it to 1 to run in batch mode
+
+2. manual mode
+Execute each server and client process as following.
+usage: server.py [--pid PID]
+                 [--server_count SERVER_COUNT]
+                 [--client_count CLIENT_COUNT]
+                 [--skipped_slot SKIPPED_SLOT]
+                 [--message_loss MESSAGE_LOSS]
+
+usage: client.py [--cid CID]
+                 [--server_count SERVER_COUNT]
+                 [--client_count CLIENT_COUNT]
+                 [--message_loss MESSAGE_LOSS]
+                 [--batch_mode BATCH_MODE]
+
