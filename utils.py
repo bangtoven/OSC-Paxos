@@ -1,5 +1,6 @@
 #from random import choices
-import random
+#import random
+import numpy
 
 class process_state:
 	def __init__(self, ip_val, port_val, pid_val):
@@ -26,11 +27,12 @@ def sendMessageWithLoss(channel, label, value, lossRate):
 	if lossRate == 0.0:
 		channel.send_message(label, value)
 	else:
-		success = 1.0 - lossRate
-		if random.choices([True, False], [success, lossRate]):
-			channel.send_message(label, value)
-		else:
-			print("message dropped by simulated loss.")
+                success = 1.0 - lossRate
+                prob = numpy.random.rand()
+                if prob < success:
+                    channel.send_message(label, value) 
+                else:
+                    print("message dropped by simulated loss.")
 
 def getMsg2Send(pid):
 	msg = ""

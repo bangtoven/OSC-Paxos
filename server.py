@@ -74,7 +74,7 @@ class ServerProcess:
     def shouldIBeLeader(self, view):
         nextView = view + 1
         if (nextView % self.totalNumber) == self.pid:
-            print("Sending iAmLeader.")
+            print("Sending iAmLeader, pid: ", self.pid)
             self.electionStatus = Election(nextView, self.lastRound+1, None)
             self.sendMessageToServers("/iAmLeader", self.electionStatus.toString())
         else:
@@ -99,8 +99,10 @@ class ServerProcess:
                 previousValue = None
             elif self.lastRound == newRound:
                 record = self.records[newRound]
-                if record.learned == False: # only when it is not learned yet
-                    previousValue = record.message
+                #if record.learned == Falise: # only when it is not learned yet
+                previousValue = record.message
+                #else:
+                #    previousValue = None
             elif self.lastRound < newRound:
                 print("I am missing something")
                 # TODO ask other server for the missing value
@@ -179,7 +181,7 @@ class ServerProcess:
 
             if self.electionStatus.majorityCheck.addVoteAndCheck():
                 self.electionStatus.decided = True
-                print("Yeah, I become a leader.")
+                print("Yeah, I become a leader, pid: ", self.pid)
 
                 hole = self.detectHole()
                 if hole != -1:
@@ -276,7 +278,7 @@ class ServerProcess:
             print("Someone says my leader/ future leader is faulty.")
             self.shouldIBeLeader(int(recievedMsg))
         else:
-            print("It's not my current leader. Maybe I already had dealt with this issue.")
+            print("It's not my current leader. Maybe I already had dealt with this issue, pid: {} and view: {} ".format(self.pid, self.view))
 
 
     def sendMessageToServers(self, label, value, exceptMe=False):

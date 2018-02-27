@@ -38,5 +38,5 @@ if __name__ == "__main__":
 
     #os.system(server_run_cmd)
     #time.sleep(2)
-    os.system(client_run_cmd)
+    #os.system(client_run_cmd)
     #os.system("python3 server.py --pid 2 & python3 server.py --pid 1 & python3 server.py --pid 0")

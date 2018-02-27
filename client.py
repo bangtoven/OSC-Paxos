@@ -17,6 +17,7 @@ class ClientProcess:
     else:
       self.lossRate = 0.0
 
+    self.sendingMsg = ""
     self.mutex = Lock()
     self.cid = cid
     self.mid = -1
@@ -60,7 +61,8 @@ class ClientProcess:
     #print("lognumber:", self.logRoundNumber)
     notInResponses = False
     if recieved.roundNumber not in self.responses:
-      self.view = recieved.view
+      if self.view < recieved.view:
+        self.view = recieved.view
       self.responses[recieved.roundNumber] = recieved
       notInResponses = True
 
@@ -117,9 +119,9 @@ class ClientProcess:
     else:
       value = input(str(self.cid) + ": ")
     self.mid += 1
-    sendingMsg = Message(self.cid, self.mid, value)
+    self.sendingMsg = Message(self.cid, self.mid, value)
     self.received = False
-    self.sendMessageToEveryone(label, sendingMsg.toString())
+    self.sendMessageToEveryone(label, self.sendingMsg.toString())
     t = threading.Timer(3.0, self.checkReceived)
     t.start()
 
@@ -127,6 +129,8 @@ class ClientProcess:
       print("inside check recieved", self.received)
       if self.received == False:
           self.sendMessageToEveryone("/leaderFaulty", self.view)
+          time.sleep(1)
+          self.sendMessageToEveryone("/clientRequest", self.sendingMsg.toString())
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
