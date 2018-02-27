@@ -21,6 +21,7 @@ class ServerProcess:
             self.lossRate = 0.0
 
         self.mutex = Lock()
+        self.leaderAlive = False
 
         self.pid = pid
         self.view = -1
@@ -68,7 +69,8 @@ class ServerProcess:
         listeningThread.start()
         print("Process {} started.".format(self.pid))
 
-        self.shouldIBeLeader(self.view)
+        if self.pid == 0:
+            self.shouldIBeLeader(self.view)
 
 
     def shouldIBeLeader(self, view):
@@ -80,10 +82,20 @@ class ServerProcess:
         else:
             self.electionStatus = None
             print("It's not my turn to be a leader.")
+            self.leaderAlive = False
+            t = threading.Timer(3.0, self.checkLeader, [self.view]) 
+            t.start()
+
+    def checkLeader(self, view):
+        print("inside check leader for view: ", view, ", pid: ", self.pid)
+        if self.leaderAlive == False:
+            self.view = view+1
+            self.sendLeaderFaulty()
 
     # new leader => acceptor
     def iAmLeader_handler(self, addr, args, recievedMsg):
         print("\n"+addr)
+        self.leaderAlive = True
         election = Election.fromString(recievedMsg)
         newView = election.view
         newLeader = newView % self.totalNumber
@@ -182,6 +194,7 @@ class ServerProcess:
             if self.electionStatus.majorityCheck.addVoteAndCheck():
                 self.electionStatus.decided = True
                 print("Yeah, I become a leader, pid: ", self.pid)
+                #self.leaderAlive = True
 
                 hole = self.detectHole()
                 if hole != -1:
@@ -254,8 +267,6 @@ class ServerProcess:
                 self.buffer.remove(record.message)
 
             print("Learned:", record.toString())
-            with open("log_server_" + str(self.pid), 'a') as f_log:
-                f_log.write(record.toString() + "\n")
             
             if self.detectHole() != -1:
                 print("do something")
@@ -263,6 +274,8 @@ class ServerProcess:
             else:
                 print("no holes. sending msg to client")
                 while self.executedRound < self.lastRound:
+                    with open("log_server_" + str(self.pid), 'a') as f_log:
+                        f_log.write(record.toString() + "\n")
                     self.executedRound += 1
                     recordToExecute = self.records[self.executedRound]
                     self.sendMessageToClients(recordToExecute.toString())
