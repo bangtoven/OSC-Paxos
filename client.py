@@ -129,8 +129,9 @@ class ClientProcess:
       print("inside check recieved", self.received)
       if self.received == False:
           self.sendMessageToEveryone("/leaderFaulty", self.view)
-          time.sleep(1)
-          self.sendMessageToEveryone("/clientRequest", self.sendingMsg.toString())
+          time.sleep(2)
+          if self.received == False:
+            self.sendMessageToEveryone("/clientRequest", self.sendingMsg.toString())
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
